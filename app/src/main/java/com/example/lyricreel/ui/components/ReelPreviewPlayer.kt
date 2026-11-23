@@ -98,13 +98,11 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Aplicar velocidad 1.0x o 0.5x a ambos reproductores
     LaunchedEffect(playbackSpeed) {
         videoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
         audioPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
-    // Sincronización del reproductor de video
     LaunchedEffect(activeClip?.id, activeClip?.uri, isPlaying, muteOriginalAudio) {
         if (activeClip != null && !activeClip.isImage) {
             val currentUri = videoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
@@ -132,7 +130,6 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Sincronización de la canción
     LaunchedEffect(audioUri, isPlaying, audioTrimStartMs) {
         if (audioUri != null) {
             val currentAudioUri = audioPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
@@ -171,7 +168,6 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Estados actualizados para evitar valores congelados dentro de pointerInput
     val latestClip by rememberUpdatedState(activeClip)
     val latestTouchTarget by rememberUpdatedState(touchTarget)
     val latestTextX by rememberUpdatedState(textXRatio)
@@ -191,7 +187,7 @@ fun ReelPreviewPlayer(
         val boxWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
         val boxHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
 
-        // Capa 1: Video o Foto
+        // Capa 1: Video o Foto con transformación
         if (activeClip == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -244,12 +240,12 @@ fun ReelPreviewPlayer(
             )
         }
 
-        // Capa 2: Detector de gestos limpio encima de AndroidView
+        // Capa 2: Superficie táctil transparente que captura arrastrar y pellizcar
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(boxWidthPx, boxHeightPx) {
-                    detectTransformGestures { _, pan, zoom, _ ->
+                    detectTransformGestures(panZoomLock = false) { _, pan, zoom, _ ->
                         when (latestTouchTarget) {
                             CanvasTouchTarget.MEDIA -> {
                                 val clip = latestClip ?: return@detectTransformGestures
@@ -270,8 +266,7 @@ fun ReelPreviewPlayer(
         )
 
         // Capa 3: Letra sincronizada en pantalla
-        val displayLyric = activeLyricText
-        if (!displayLyric.isNullOrBlank()) {
+        if (!activeLyricText.isNullOrBlank()) {
             val posX = (boxWidthPx * textXRatio).roundToInt()
             val posY = (boxHeightPx * textYRatio).roundToInt()
             Box(
@@ -287,7 +282,7 @@ fun ReelPreviewPlayer(
                     .then(
                         if (touchTarget == CanvasTouchTarget.LYRICS) {
                             Modifier
-                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         } else {
                             Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -296,7 +291,7 @@ fun ReelPreviewPlayer(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = displayLyric,
+                    text = activeLyricText,
                     color = Color.White,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,

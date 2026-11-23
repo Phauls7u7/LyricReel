@@ -17,10 +17,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -88,12 +95,21 @@ fun Phase2EditorScreen() {
     var activeTab by remember { mutableStateOf(EditorTab.TIMELINE) }
     var touchTarget by remember { mutableStateOf(CanvasTouchTarget.MEDIA) }
 
-    // Autoguardado
+    // Pila de historial para deshacer marcas, ajustes de +-0.1s o cambios de letra
+    val lyricsUndoStack = remember { mutableStateListOf<List<LyricLine>>() }
+
+    fun updateLyricsWithHistory(newLyrics: List<LyricLine>) {
+        lyricsUndoStack.add(project.lyrics)
+        if (lyricsUndoStack.size > 40) {
+            lyricsUndoStack.removeAt(0)
+        }
+        project = project.copy(lyrics = newLyrics)
+    }
+
     LaunchedEffect(project) {
         storage.saveProject(project)
     }
 
-    // Validar índice seleccionado
     LaunchedEffect(project.clips.size) {
         if (project.clips.isEmpty()) {
             selectedClipIndex = 0
@@ -104,7 +120,6 @@ fun Phase2EditorScreen() {
         }
     }
 
-    // Reloj maestro respetando velocidad 1.0x o 0.5x
     LaunchedEffect(isPlaying, project.totalDurationMs, playbackSpeed) {
         if (isPlaying) {
             val total = project.totalDurationMs
@@ -127,7 +142,6 @@ fun Phase2EditorScreen() {
         }
     }
 
-    // Clip activo en la línea de tiempo
     val activeClipInfo = remember(project.clips, currentTimelineMs) {
         var accumulated = 0L
         var foundClip: MediaClip? = null
@@ -156,7 +170,6 @@ fun Phase2EditorScreen() {
         }
     }
 
-    // Línea de letra activa según el tiempo actual
     val activeLyricIndex = remember(project.lyrics, currentTimelineMs) {
         var found = -1
         for (i in project.lyrics.indices) {
@@ -168,11 +181,10 @@ fun Phase2EditorScreen() {
         found
     }
 
-    val activeLyricText = remember(project.lyrics, activeLyricIndex, activeTab, touchTarget) {
+    val activeLyricText = remember(project.lyrics, activeLyricIndex, touchTarget) {
         if (activeLyricIndex in project.lyrics.indices) {
             project.lyrics[activeLyricIndex].text
         } else if (touchTarget == CanvasTouchTarget.LYRICS && project.lyrics.isNotEmpty()) {
-            // Muestra la primera línea como guía mientras acomodas el texto en pantalla
             project.lyrics.first().text
         } else {
             null
@@ -219,31 +231,38 @@ fun Phase2EditorScreen() {
         }
     }
 
+    fun adjustActiveZoom(delta: Float) {
+        if (touchTarget == CanvasTouchTarget.MEDIA) {
+            val idx = activeClipIndexFromPlayhead
+            if (idx in project.clips.indices) {
+                val updated = project.clips.toMutableList()
+                val cur = updated[idx]
+                updated[idx] = cur.copy(scale = (cur.scale + delta).coerceIn(0.4f, 4.5f))
+                project = project.copy(clips = updated)
+            }
+        } else {
+            project = project.copy(textScale = (project.textScale + delta).coerceIn(0.5f, 3.0f))
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Barra superior con selector táctil (Mover Fondo vs Mover Letra)
+        // Barra superior: Selector Fondo/Letra + Controles rápidos de Zoom
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "LyricReel",
-                color = accent,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold
-            )
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(
                     selected = touchTarget == CanvasTouchTarget.MEDIA,
                     onClick = { touchTarget = CanvasTouchTarget.MEDIA },
-                    label = { Text("Mover Fondo", fontSize = 11.sp) },
+                    label = { Text("Fondo", fontSize = 11.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = accent,
                         selectedLabelColor = Color.Black,
@@ -255,7 +274,7 @@ fun Phase2EditorScreen() {
                 FilterChip(
                     selected = touchTarget == CanvasTouchTarget.LYRICS,
                     onClick = { touchTarget = CanvasTouchTarget.LYRICS },
-                    label = { Text("Mover Letra", fontSize = 11.sp) },
+                    label = { Text("Letra", fontSize = 11.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = accent,
                         selectedLabelColor = Color.Black,
@@ -263,6 +282,15 @@ fun Phase2EditorScreen() {
                     ),
                     modifier = Modifier.height(28.dp)
                 )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { adjustActiveZoom(-0.15f) }, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Default.ZoomOut, contentDescription = "Alejar", tint = Color.White, modifier = Modifier.size(18.dp))
+                }
+                IconButton(onClick = { adjustActiveZoom(0.15f) }, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Default.ZoomIn, contentDescription = "Acercar", tint = accent, modifier = Modifier.size(18.dp))
+                }
             }
         }
 
@@ -310,7 +338,7 @@ fun Phase2EditorScreen() {
             )
         }
 
-        // Selector de pestaña de edición (Clips/Audio vs Letras)
+        // Pestañas inferiores (1. Clips y Canción / 2. Letras y Tap-to-Sync)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -324,7 +352,7 @@ fun Phase2EditorScreen() {
                     activeTab = EditorTab.TIMELINE
                     touchTarget = CanvasTouchTarget.MEDIA
                 },
-                label = { Text("1. Clips y Canción", fontSize = 12.sp) },
+                label = { Text("1. Clips y Canción", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = accent,
                     selectedLabelColor = Color.Black,
@@ -339,7 +367,7 @@ fun Phase2EditorScreen() {
                     activeTab = EditorTab.LYRICS
                     touchTarget = CanvasTouchTarget.LYRICS
                 },
-                label = { Text("2. Letras (Tap-to-Sync)", fontSize = 12.sp) },
+                label = { Text("2. Letras (Sync)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = accent,
                     selectedLabelColor = Color.Black,
@@ -350,7 +378,6 @@ fun Phase2EditorScreen() {
             )
         }
 
-        // Panel inferior dinámico según pestaña activa
         when (activeTab) {
             EditorTab.TIMELINE -> {
                 TimelineEditor(
@@ -487,6 +514,7 @@ fun Phase2EditorScreen() {
                     totalDurationMs = project.totalDurationMs,
                     isPlaying = isPlaying,
                     playbackSpeed = playbackSpeed,
+                    canUndo = lyricsUndoStack.isNotEmpty(),
                     onTogglePlay = {
                         if (project.clips.isNotEmpty()) {
                             isPlaying = !isPlaying
@@ -509,24 +537,21 @@ fun Phase2EditorScreen() {
                                 val existingTime = project.lyrics.getOrNull(idx)?.takeIf { it.text == text }?.startTimeMs
                                 LyricLine(text = text, startTimeMs = existingTime)
                             }
-                        project = project.copy(lyrics = lines)
+                        updateLyricsWithHistory(lines)
                     },
                     onTapSyncNext = {
                         val nextIdx = project.lyrics.indexOfFirst { it.startTimeMs == null }
                         if (nextIdx != -1) {
                             val updated = project.lyrics.toMutableList()
                             updated[nextIdx] = updated[nextIdx].copy(startTimeMs = currentTimelineMs)
-                            project = project.copy(lyrics = updated)
+                            updateLyricsWithHistory(updated)
                         }
                     },
-                    onUndoLastSync = {
-                        val lastSyncedIdx = project.lyrics.indexOfLast { it.startTimeMs != null }
-                        if (lastSyncedIdx != -1) {
-                            val updated = project.lyrics.toMutableList()
-                            val prevTime = updated[lastSyncedIdx].startTimeMs ?: 0L
-                            updated[lastSyncedIdx] = updated[lastSyncedIdx].copy(startTimeMs = null)
-                            project = project.copy(lyrics = updated)
-                            currentTimelineMs = prevTime
+                    onUndo = {
+                        if (lyricsUndoStack.isNotEmpty()) {
+                            val previous = lyricsUndoStack.removeAt(lyricsUndoStack.lastIndex)
+                            project = project.copy(lyrics = previous)
+                            Toast.makeText(context, "Cambio deshecho", Toast.LENGTH_SHORT).show()
                         }
                     },
                     onNudgeLineTime = { index, deltaMs ->
@@ -535,7 +560,7 @@ fun Phase2EditorScreen() {
                             val newTime = (curTime + deltaMs).coerceIn(0L, project.totalDurationMs)
                             val updated = project.lyrics.toMutableList()
                             updated[index] = updated[index].copy(startTimeMs = newTime)
-                            project = project.copy(lyrics = updated)
+                            updateLyricsWithHistory(updated)
                             if (!isPlaying) currentTimelineMs = newTime
                         }
                     },

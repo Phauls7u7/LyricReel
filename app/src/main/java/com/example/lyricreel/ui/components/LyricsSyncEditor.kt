@@ -61,12 +61,13 @@ fun LyricsSyncEditor(
     totalDurationMs: Long,
     isPlaying: Boolean,
     playbackSpeed: Float,
+    canUndo: Boolean,
     onTogglePlay: () -> Unit,
     onScrubTimeline: (Long) -> Unit,
     onToggleSpeed: () -> Unit,
     onSavePastedLyrics: (String) -> Unit,
     onTapSyncNext: () -> Unit,
-    onUndoLastSync: () -> Unit,
+    onUndo: () -> Unit,
     onNudgeLineTime: (index: Int, deltaMs: Long) -> Unit,
     onJumpToLine: (index: Int) -> Unit
 ) {
@@ -79,9 +80,6 @@ fun LyricsSyncEditor(
 
     val nextUnsyncedIndex = remember(lyrics) {
         lyrics.indexOfFirst { it.startTimeMs == null }
-    }
-    val hasAnySynced = remember(lyrics) {
-        lyrics.any { it.startTimeMs != null }
     }
     val listState = rememberLazyListState()
 
@@ -132,7 +130,6 @@ fun LyricsSyncEditor(
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // 1. Controles de reproducción, velocidad 0.5x y botón Pegar Letra
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -160,7 +157,6 @@ fun LyricsSyncEditor(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Botón velocidad 0.5x / 1.0x
             OutlinedButton(
                 onClick = onToggleSpeed,
                 shape = RoundedCornerShape(8.dp),
@@ -187,7 +183,6 @@ fun LyricsSyncEditor(
             }
         }
 
-        // 2. Scrubber de tiempo
         Slider(
             value = (currentTimelineMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f),
             onValueChange = { ratio -> onScrubTimeline((ratio * totalMs).toLong()) },
@@ -201,7 +196,6 @@ fun LyricsSyncEditor(
                 .height(22.dp)
         )
 
-        // 3. Botón principal Tap-to-Sync y Deshacer última marca
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -232,23 +226,22 @@ fun LyricsSyncEditor(
             }
 
             OutlinedButton(
-                onClick = onUndoLastSync,
-                enabled = hasAnySynced,
+                onClick = onUndo,
+                enabled = canUndo,
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier.height(44.dp)
             ) {
                 Icon(
                     Icons.Default.Undo,
-                    contentDescription = "Deshacer marca",
-                    tint = if (hasAnySynced) Color.White else Color.DarkGray,
+                    contentDescription = "Deshacer",
+                    tint = if (canUndo) Color.White else Color.DarkGray,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Deshacer", color = if (hasAnySynced) Color.White else Color.DarkGray, fontSize = 12.sp)
+                Text("Deshacer", color = if (canUndo) Color.White else Color.DarkGray, fontSize = 12.sp)
             }
         }
 
-        // 4. Lista de líneas con ajuste fino ±0.1s
         if (lyrics.isEmpty()) {
             Box(
                 modifier = Modifier
