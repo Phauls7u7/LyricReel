@@ -1,17 +1,20 @@
 package com.example.lyricreel.ui.components
 
 import android.net.Uri
-import android.view.ViewGroup
+import android.view.LayoutInflater
 import androidx.annotation.OptIn
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -21,30 +24,46 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.lyricreel.R
 import com.example.lyricreel.media.MediaUtils
 import com.example.lyricreel.model.MediaClip
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
+import kotlin.math.roundToInt
+
+enum class CanvasTouchTarget {
+    MEDIA,
+    LYRICS
+}
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -53,26 +72,36 @@ fun ReelPreviewPlayer(
     localClipMs: Long,
     currentTimelineMs: Long,
     isPlaying: Boolean,
+    playbackSpeed: Float,
     audioUri: String?,
     audioTrimStartMs: Long,
     muteOriginalAudio: Boolean,
+    activeLyricText: String?,
+    textXRatio: Float,
+    textYRatio: Float,
+    textScale: Float,
+    touchTarget: CanvasTouchTarget,
     onUpdateClipTransform: (scale: Float, offsetX: Float, offsetY: Float) -> Unit,
+    onUpdateTextTransform: (xRatio: Float, yRatio: Float, scale: Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
 
-    val videoPlayer = remember {
-        ExoPlayer.Builder(context).build()
-    }
-    val audioPlayer = remember {
-        ExoPlayer.Builder(context).build()
-    }
+    val videoPlayer = remember { ExoPlayer.Builder(context).build() }
+    val audioPlayer = remember { ExoPlayer.Builder(context).build() }
 
     DisposableEffect(Unit) {
         onDispose {
             videoPlayer.release()
             audioPlayer.release()
         }
+    }
+
+    // Aplicar velocidad 1.0x o 0.5x a ambos reproductores
+    LaunchedEffect(playbackSpeed) {
+        videoPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
+        audioPlayer.playbackParameters = PlaybackParameters(playbackSpeed)
     }
 
     // Sincronización del reproductor de video
@@ -85,7 +114,7 @@ fun ReelPreviewPlayer(
             }
             videoPlayer.volume = if (muteOriginalAudio) 0f else 1f
             val targetPos = (activeClip.trimStartMs + localClipMs).coerceIn(0L, activeClip.sourceDurationMs)
-            if (abs(videoPlayer.currentPosition - targetPos) > 200L) {
+            if (abs(videoPlayer.currentPosition - targetPos) > 220L) {
                 videoPlayer.seekTo(targetPos)
             }
             videoPlayer.playWhenReady = isPlaying
@@ -94,7 +123,6 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Sincronización cuadro a cuadro al arrastrar línea de tiempo en pausa
     LaunchedEffect(localClipMs, activeClip?.id, isPlaying) {
         if (!isPlaying && activeClip != null && !activeClip.isImage) {
             val targetPos = (activeClip.trimStartMs + localClipMs).coerceIn(0L, activeClip.sourceDurationMs)
@@ -104,7 +132,7 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Sincronización de la canción de fondo
+    // Sincronización de la canción
     LaunchedEffect(audioUri, isPlaying, audioTrimStartMs) {
         if (audioUri != null) {
             val currentAudioUri = audioPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
@@ -113,7 +141,7 @@ fun ReelPreviewPlayer(
                 audioPlayer.prepare()
             }
             val targetAudio = (audioTrimStartMs + currentTimelineMs).coerceAtLeast(0L)
-            if (abs(audioPlayer.currentPosition - targetAudio) > 200L) {
+            if (abs(audioPlayer.currentPosition - targetAudio) > 220L) {
                 audioPlayer.seekTo(targetAudio)
             }
             audioPlayer.playWhenReady = isPlaying
@@ -131,7 +159,6 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Cargar bitmap si el clip activo es imagen
     var imageBitmap by remember(activeClip?.uri) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(activeClip?.uri, activeClip?.isImage) {
         if (activeClip != null && activeClip.isImage) {
@@ -144,34 +171,37 @@ fun ReelPreviewPlayer(
         }
     }
 
-    // Marco 9:16 con gestos de zoom y desplazamiento
-    Box(
+    // Estados actualizados para evitar valores congelados dentro de pointerInput
+    val latestClip by rememberUpdatedState(activeClip)
+    val latestTouchTarget by rememberUpdatedState(touchTarget)
+    val latestTextX by rememberUpdatedState(textXRatio)
+    val latestTextY by rememberUpdatedState(textYRatio)
+    val latestTextScale by rememberUpdatedState(textScale)
+    val latestOnClipTransform by rememberUpdatedState(onUpdateClipTransform)
+    val latestOnTextTransform by rememberUpdatedState(onUpdateTextTransform)
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxHeight()
             .aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF0A0A0A))
-            .border(1.dp, Color(0xFF222222), RoundedCornerShape(12.dp))
-            .pointerInput(activeClip?.id) {
-                if (activeClip != null) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        val newScale = (activeClip.scale * zoom).coerceIn(0.5f, 4.0f)
-                        val newOffsetX = (activeClip.offsetX + pan.x).coerceIn(-600f, 600f)
-                        val newOffsetY = (activeClip.offsetY + pan.y).coerceIn(-900f, 900f)
-                        onUpdateClipTransform(newScale, newOffsetX, newOffsetY)
-                    }
-                }
-            },
-        contentAlignment = Alignment.Center
+            .border(1.dp, Color(0xFF262626), RoundedCornerShape(12.dp))
     ) {
+        val boxWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
+        val boxHeightPx = with(density) { maxHeight.toPx().coerceAtLeast(1f) }
+
+        // Capa 1: Video o Foto
         if (activeClip == null) {
-            Text(
-                text = "Toca '+ Clip' abajo para importar\nun video o foto (9:16)",
-                color = Color.Gray,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(16.dp)
-            )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "Toca '+ Clip' abajo para importar\nun video o foto (9:16)",
+                    color = Color.Gray,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
         } else if (activeClip.isImage) {
             imageBitmap?.let { bmp ->
                 Image(
@@ -191,14 +221,10 @@ fun ReelPreviewPlayer(
         } else {
             AndroidView(
                 factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        useController = false
-                        player = videoPlayer
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                    }
+                    val view = LayoutInflater.from(ctx)
+                        .inflate(R.layout.texture_player_view, null, false) as PlayerView
+                    view.player = videoPlayer
+                    view
                 },
                 update = { playerView ->
                     playerView.resizeMode = if (activeClip.fillScreen) {
@@ -216,6 +242,74 @@ fun ReelPreviewPlayer(
                         translationY = activeClip.offsetY
                     )
             )
+        }
+
+        // Capa 2: Detector de gestos limpio encima de AndroidView
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(boxWidthPx, boxHeightPx) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        when (latestTouchTarget) {
+                            CanvasTouchTarget.MEDIA -> {
+                                val clip = latestClip ?: return@detectTransformGestures
+                                val newScale = (clip.scale * zoom).coerceIn(0.4f, 4.5f)
+                                val newOffsetX = (clip.offsetX + pan.x).coerceIn(-boxWidthPx, boxWidthPx)
+                                val newOffsetY = (clip.offsetY + pan.y).coerceIn(-boxHeightPx, boxHeightPx)
+                                latestOnClipTransform(newScale, newOffsetX, newOffsetY)
+                            }
+                            CanvasTouchTarget.LYRICS -> {
+                                val newScale = (latestTextScale * zoom).coerceIn(0.5f, 3.0f)
+                                val newX = (latestTextX + (pan.x / boxWidthPx)).coerceIn(0.08f, 0.92f)
+                                val newY = (latestTextY + (pan.y / boxHeightPx)).coerceIn(0.08f, 0.92f)
+                                latestOnTextTransform(newX, newY, newScale)
+                            }
+                        }
+                    }
+                }
+        )
+
+        // Capa 3: Letra sincronizada en pantalla
+        val displayLyric = activeLyricText
+        if (!displayLyric.isNullOrBlank()) {
+            val posX = (boxWidthPx * textXRatio).roundToInt()
+            val posY = (boxHeightPx * textYRatio).roundToInt()
+            Box(
+                modifier = Modifier
+                    .offset { IntOffset(posX, posY) }
+                    .graphicsLayer(
+                        translationX = -boxWidthPx * 0.42f,
+                        translationY = -40f,
+                        scaleX = textScale,
+                        scaleY = textScale
+                    )
+                    .widthIn(max = maxWidth * 0.84f)
+                    .then(
+                        if (touchTarget == CanvasTouchTarget.LYRICS) {
+                            Modifier
+                                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        } else {
+                            Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = displayLyric,
+                    color = Color.White,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    style = TextStyle(
+                        shadow = Shadow(
+                            color = Color.Black,
+                            offset = Offset(2f, 2f),
+                            blurRadius = 6f
+                        )
+                    )
+                )
+            }
         }
     }
 }

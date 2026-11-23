@@ -19,13 +19,23 @@ data class MediaClip(
         get() = (trimEndMs - trimStartMs).coerceAtLeast(300L)
 }
 
+data class LyricLine(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String,
+    val startTimeMs: Long? = null
+)
+
 data class ReelProject(
     val clips: List<MediaClip> = emptyList(),
     val audioUri: String? = null,
     val audioName: String? = null,
     val audioDurationMs: Long = 0L,
     val audioTrimStartMs: Long = 0L,
-    val muteOriginalAudio: Boolean = true
+    val muteOriginalAudio: Boolean = true,
+    val lyrics: List<LyricLine> = emptyList(),
+    val textXRatio: Float = 0.5f,
+    val textYRatio: Float = 0.72f,
+    val textScale: Float = 1.0f
 ) {
     val totalDurationMs: Long
         get() = clips.sumOf { it.effectiveDurationMs }

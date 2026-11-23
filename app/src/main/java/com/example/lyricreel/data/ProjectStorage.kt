@@ -1,6 +1,7 @@
 package com.example.lyricreel.data
 
 import android.content.Context
+import com.example.lyricreel.model.LyricLine
 import com.example.lyricreel.model.MediaClip
 import com.example.lyricreel.model.ReelProject
 import org.json.JSONArray
@@ -16,6 +17,9 @@ class ProjectStorage(context: Context) {
             put("audioDurationMs", project.audioDurationMs)
             put("audioTrimStartMs", project.audioTrimStartMs)
             put("muteOriginalAudio", project.muteOriginalAudio)
+            put("textXRatio", project.textXRatio.toDouble())
+            put("textYRatio", project.textYRatio.toDouble())
+            put("textScale", project.textScale.toDouble())
 
             val clipsArray = JSONArray()
             project.clips.forEach { clip ->
@@ -35,6 +39,17 @@ class ProjectStorage(context: Context) {
                 clipsArray.put(obj)
             }
             put("clips", clipsArray)
+
+            val lyricsArray = JSONArray()
+            project.lyrics.forEach { line ->
+                val lObj = JSONObject().apply {
+                    put("id", line.id)
+                    put("text", line.text)
+                    put("startTimeMs", line.startTimeMs ?: JSONObject.NULL)
+                }
+                lyricsArray.put(lObj)
+            }
+            put("lyrics", lyricsArray)
         }
         prefs.edit().putString("current_project_json", root.toString()).apply()
     }
@@ -64,6 +79,21 @@ class ProjectStorage(context: Context) {
                     )
                 )
             }
+
+            val lyricsArray = root.optJSONArray("lyrics") ?: JSONArray()
+            val lyrics = mutableListOf<LyricLine>()
+            for (i in 0 until lyricsArray.length()) {
+                val lObj = lyricsArray.getJSONObject(i)
+                val startMs = if (lObj.isNull("startTimeMs")) null else lObj.optLong("startTimeMs")
+                lyrics.add(
+                    LyricLine(
+                        id = lObj.optString("id"),
+                        text = lObj.optString("text", ""),
+                        startTimeMs = startMs
+                    )
+                )
+            }
+
             val audioUri = if (root.isNull("audioUri")) null else root.optString("audioUri", null)
             val audioName = if (root.isNull("audioName")) null else root.optString("audioName", null)
             ReelProject(
@@ -72,7 +102,11 @@ class ProjectStorage(context: Context) {
                 audioName = audioName,
                 audioDurationMs = root.optLong("audioDurationMs", 0L),
                 audioTrimStartMs = root.optLong("audioTrimStartMs", 0L),
-                muteOriginalAudio = root.optBoolean("muteOriginalAudio", true)
+                muteOriginalAudio = root.optBoolean("muteOriginalAudio", true),
+                lyrics = lyrics,
+                textXRatio = root.optDouble("textXRatio", 0.5).toFloat(),
+                textYRatio = root.optDouble("textYRatio", 0.72).toFloat(),
+                textScale = root.optDouble("textScale", 1.0).toFloat()
             )
         } catch (e: Exception) {
             ReelProject()
