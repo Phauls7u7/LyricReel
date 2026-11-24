@@ -9,7 +9,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -84,6 +89,7 @@ fun LyricsSyncEditor(
         modifier = Modifier.fillMaxWidth().background(Color(0xFF080808)).padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Fila de botones compactos
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             IconButton(
                 onClick = onTogglePlay,
@@ -91,23 +97,23 @@ fun LyricsSyncEditor(
             ) {
                 Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black)
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("${MediaUtils.formatTimeMs(currentTimelineMs)} / ${MediaUtils.formatTimeMs(totalDurationMs)}", color = Color.White, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("${MediaUtils.formatTimeMs(currentTimelineMs)} / ${MediaUtils.formatTimeMs(totalDurationMs)}", color = Color.White, fontSize = 11.sp)
             Spacer(modifier = Modifier.weight(1f))
 
-            OutlinedButton(onClick = onToggleSpeed, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp)) {
-                Text(if (playbackSpeed < 1f) "0.5x" else "1.0x", color = if (playbackSpeed < 1f) accent else Color.White, fontSize = 12.sp)
+            OutlinedButton(onClick = onToggleSpeed, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+                Text(if (playbackSpeed < 1f) "0.5x" else "1.0x", color = if (playbackSpeed < 1f) accent else Color.White, fontSize = 11.sp)
             }
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             
-            // Botón Estilo
-            FilledTonalButton(onClick = onOpenStyleEditor, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp)) {
+            FilledTonalButton(onClick = onOpenStyleEditor, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                 Icon(Icons.Default.Palette, contentDescription = null, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Estilo", fontSize = 11.sp)
             }
-            Spacer(modifier = Modifier.width(6.dp))
-            FilledTonalButton(onClick = { showPasteDialog = true }, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp)) {
+            Spacer(modifier = Modifier.width(4.dp))
+            
+            FilledTonalButton(onClick = { showPasteDialog = true }, shape = RoundedCornerShape(8.dp), modifier = Modifier.height(34.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                 Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(15.dp))
             }
         }

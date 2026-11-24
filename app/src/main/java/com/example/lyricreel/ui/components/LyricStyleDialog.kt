@@ -45,7 +45,6 @@ fun LyricStyleDialog(
             ) {
                 Text("Estilo de Letras", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
 
-                // 1. Color del texto
                 Text("Color de Texto", color = Color.LightGray, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(colors) { hex ->
@@ -61,7 +60,6 @@ fun LyricStyleDialog(
                     }
                 }
 
-                // 2. Fuente
                 Text("Tipografía", color = Color.LightGray, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(fonts) { (id, name) ->
@@ -69,14 +67,11 @@ fun LyricStyleDialog(
                             selected = project.lyricFont == id,
                             onClick = { onUpdateStyle(project.copy(lyricFont = id)) },
                             label = { Text(name) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accent, selectedLabelColor = Color.Black
-                            )
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent, selectedLabelColor = Color.Black)
                         )
                     }
                 }
 
-                // 3. Animación
                 Text("Animación de Entrada", color = Color.LightGray, fontSize = 13.sp)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(anims) { (id, name) ->
@@ -84,30 +79,19 @@ fun LyricStyleDialog(
                             selected = project.lyricAnimation == id,
                             onClick = { onUpdateStyle(project.copy(lyricAnimation = id)) },
                             label = { Text(name) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = accent, selectedLabelColor = Color.Black
-                            )
+                            colors = FilterChipDefaults.filterChipColors(selectedContainerColor = accent, selectedLabelColor = Color.Black)
                         )
                     }
                 }
 
-                // 4. Efectos (Contorno y Sombra)
                 Text("Efectos", color = Color.LightGray, fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = project.hasStroke,
-                            onCheckedChange = { onUpdateStyle(project.copy(hasStroke = it)) },
-                            colors = CheckboxDefaults.colors(checkedColor = accent)
-                        )
+                        Checkbox(checked = project.hasStroke, onCheckedChange = { onUpdateStyle(project.copy(hasStroke = it)) }, colors = CheckboxDefaults.colors(checkedColor = accent))
                         Text("Contorno", color = Color.White, fontSize = 14.sp)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = project.hasShadow,
-                            onCheckedChange = { onUpdateStyle(project.copy(hasShadow = it)) },
-                            colors = CheckboxDefaults.colors(checkedColor = accent)
-                        )
+                        Checkbox(checked = project.hasShadow, onCheckedChange = { onUpdateStyle(project.copy(hasShadow = it)) }, colors = CheckboxDefaults.colors(checkedColor = accent))
                         Text("Sombra", color = Color.White, fontSize = 14.sp)
                     }
                 }
