@@ -21,6 +21,13 @@ class ProjectStorage(context: Context) {
             put("textYRatio", project.textYRatio.toDouble())
             put("textScale", project.textScale.toDouble())
 
+            put("lyricAnimation", project.lyricAnimation)
+            put("lyricFont", project.lyricFont)
+            put("textColor", project.textColor)
+            put("strokeColor", project.strokeColor)
+            put("hasStroke", project.hasStroke)
+            put("hasShadow", project.hasShadow)
+
             val clipsArray = JSONArray()
             project.clips.forEach { clip ->
                 val obj = JSONObject().apply {
@@ -106,7 +113,14 @@ class ProjectStorage(context: Context) {
                 lyrics = lyrics,
                 textXRatio = root.optDouble("textXRatio", 0.5).toFloat(),
                 textYRatio = root.optDouble("textYRatio", 0.72).toFloat(),
-                textScale = root.optDouble("textScale", 1.0).toFloat()
+                textScale = root.optDouble("textScale", 1.0).toFloat(),
+                
+                lyricAnimation = root.optString("lyricAnimation", "SLIDE_UP"),
+                lyricFont = root.optString("lyricFont", "SANS"),
+                textColor = root.optString("textColor", "#FFFFFF"),
+                strokeColor = root.optString("strokeColor", "#000000"),
+                hasStroke = root.optBoolean("hasStroke", true),
+                hasShadow = root.optBoolean("hasShadow", true)
             )
         } catch (e: Exception) {
             ReelProject()

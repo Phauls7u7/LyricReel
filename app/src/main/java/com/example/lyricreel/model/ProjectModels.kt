@@ -35,7 +35,15 @@ data class ReelProject(
     val lyrics: List<LyricLine> = emptyList(),
     val textXRatio: Float = 0.5f,
     val textYRatio: Float = 0.72f,
-    val textScale: Float = 1.0f
+    val textScale: Float = 1.0f,
+    
+    // Nuevas propiedades de Estilo (Fase 3)
+    val lyricAnimation: String = "SLIDE_UP",
+    val lyricFont: String = "SANS",
+    val textColor: String = "#FFFFFF",
+    val strokeColor: String = "#000000",
+    val hasStroke: Boolean = true,
+    val hasShadow: Boolean = true
 ) {
     val totalDurationMs: Long
         get() = clips.sumOf { it.effectiveDurationMs }
