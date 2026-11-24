@@ -132,7 +132,6 @@ fun Phase3EditorScreen() {
         else null
     }
 
-    // Calcula exactamente cuándo empezó la línea actual para la animación
     val activeLyricStartTime = remember(project.lyrics, activeLyricIndex, touchTarget) {
         if (activeLyricIndex in project.lyrics.indices) project.lyrics[activeLyricIndex].startTimeMs ?: currentTimelineMs
         else currentTimelineMs
@@ -144,6 +143,46 @@ fun Phase3EditorScreen() {
             onUpdateStyle = { project = it },
             onDismiss = { showStyleDialog = false }
         )
+    }
+
+    val mediaPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris: List<Uri> ->
+        if (uris.isNotEmpty()) {
+            val newClips = uris.map { uri ->
+                MediaUtils.persistUriPermission(context, uri)
+                val isImg = MediaUtils.isImageUri(context, uri)
+                val dur = MediaUtils.getMediaDurationMs(context, uri, defaultIfImage = 3000L)
+                val name = MediaUtils.getFileName(context, uri)
+                MediaClip(
+                    uri = uri.toString(),
+                    name = name,
+                    isImage = isImg,
+                    sourceDurationMs = if (isImg) 15000L else dur,
+                    trimStartMs = 0L,
+                    trimEndMs = if (isImg) 3000L else dur
+                )
+            }
+            val updated = project.clips + newClips
+            project = project.copy(clips = updated)
+            selectedClipIndex = updated.lastIndex
+        }
+    }
+
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            MediaUtils.persistUriPermission(context, uri)
+            val dur = MediaUtils.getMediaDurationMs(context, uri, defaultIfImage = 0L)
+            val name = MediaUtils.getFileName(context, uri)
+            project = project.copy(
+                audioUri = uri.toString(),
+                audioName = name,
+                audioDurationMs = dur,
+                audioTrimStartMs = 0L
+            )
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(Color.Black)) {
@@ -175,22 +214,54 @@ fun Phase3EditorScreen() {
         }
 
         when (activeTab) {
-            EditorTab.TIMELINE -> { /* Por brevedad del código aquí en Termux y porque no modificamos Timeline, usamos un bloque vacio o lo llamamos si estuviera en archivo separado. */
-                // Para simplificar tu compilacion he mantenido los otros archivos intactos.
+            EditorTab.TIMELINE -> {
                 TimelineEditor(
                     project = project, selectedClipIndex = selectedClipIndex, currentTimelineMs = currentTimelineMs, isPlaying = isPlaying,
-                    onTogglePlay = { isPlaying = !isPlaying }, onScrubTimeline = { currentTimelineMs = it; isPlaying = false },
-                    onSelectClip = { selectedClipIndex = it }, onAddClipClick = { }, onAddAudioClick = { }, onSplitClip = { },
-                    onDeleteSelectedClip = { }, onMoveClip = { _, _ -> }, onTrimSelectedClip = { _, _ -> }, onToggleFillScreen = { },
-                    onResetTransform = { }, onToggleMuteOriginal = { }, onUpdateAudioStart = { }, onRemoveAudio = { }
+                    onTogglePlay = { if (project.clips.isNotEmpty()) isPlaying = !isPlaying else Toast.makeText(context, "Agrega al menos un video o foto", Toast.LENGTH_SHORT).show() }, 
+                    onScrubTimeline = { currentTimelineMs = it; isPlaying = false },
+                    onSelectClip = { idx -> isPlaying = false; selectedClipIndex = idx; var acc = 0L; for (i in 0 until idx) acc += project.clips[i].effectiveDurationMs; currentTimelineMs = acc }, 
+                    onAddClipClick = { isPlaying = false; mediaPickerLauncher.launch(arrayOf("video/*", "image/*")) }, 
+                    onAddAudioClick = { isPlaying = false; audioPickerLauncher.launch(arrayOf("audio/*")) }, 
+                    onSplitClip = { 
+                        isPlaying = false
+                        val clip = project.clips.getOrNull(activeClipIdx)
+                        if (clip != null && localClipMs > 300L && localClipMs < clip.effectiveDurationMs - 300L) {
+                            val firstHalf = clip.copy(trimEndMs = clip.trimStartMs + localClipMs)
+                            val secondHalf = clip.copy(id = UUID.randomUUID().toString(), trimStartMs = clip.trimStartMs + localClipMs)
+                            val updated = project.clips.toMutableList()
+                            updated.removeAt(activeClipIdx)
+                            updated.add(activeClipIdx, firstHalf)
+                            updated.add(activeClipIdx + 1, secondHalf)
+                            project = project.copy(clips = updated)
+                            selectedClipIndex = activeClipIdx + 1
+                            Toast.makeText(context, "Clip dividido", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Mueve el cabezal hacia el centro del clip para dividir", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onDeleteSelectedClip = { if (selectedClipIndex in project.clips.indices) { isPlaying = false; val updated = project.clips.toMutableList(); updated.removeAt(selectedClipIndex); project = project.copy(clips = updated); selectedClipIndex = (selectedClipIndex - 1).coerceAtLeast(0); currentTimelineMs = 0L } }, 
+                    onMoveClip = { from, to -> if (from in project.clips.indices && to in project.clips.indices) { isPlaying = false; val updated = project.clips.toMutableList(); val item = updated.removeAt(from); updated.add(to, item); project = project.copy(clips = updated); selectedClipIndex = to } }, 
+                    onTrimSelectedClip = { start, end -> if (selectedClipIndex in project.clips.indices) { isPlaying = false; val updated = project.clips.toMutableList(); updated[selectedClipIndex] = updated[selectedClipIndex].copy(trimStartMs = start, trimEndMs = end); project = project.copy(clips = updated) } }, 
+                    onToggleFillScreen = { if (selectedClipIndex in project.clips.indices) { val updated = project.clips.toMutableList(); updated[selectedClipIndex] = updated[selectedClipIndex].copy(fillScreen = !updated[selectedClipIndex].fillScreen); project = project.copy(clips = updated) } },
+                    onResetTransform = { if (selectedClipIndex in project.clips.indices) { val updated = project.clips.toMutableList(); updated[selectedClipIndex] = updated[selectedClipIndex].copy(scale = 1f, offsetX = 0f, offsetY = 0f); project = project.copy(clips = updated) } }, 
+                    onToggleMuteOriginal = { project = project.copy(muteOriginalAudio = !project.muteOriginalAudio) }, 
+                    onUpdateAudioStart = { isPlaying = false; project = project.copy(audioTrimStartMs = it) }, 
+                    onRemoveAudio = { isPlaying = false; project = project.copy(audioUri = null, audioName = null, audioDurationMs = 0L, audioTrimStartMs = 0L) }
                 )
             }
             EditorTab.LYRICS -> {
                 LyricsSyncEditor(
                     lyrics = project.lyrics, activeLyricIndex = activeLyricIndex, currentTimelineMs = currentTimelineMs, totalDurationMs = project.totalDurationMs,
                     isPlaying = isPlaying, playbackSpeed = playbackSpeed, canUndo = lyricsUndoStack.isNotEmpty(),
-                    onTogglePlay = { isPlaying = !isPlaying }, onScrubTimeline = { currentTimelineMs = it; isPlaying = false }, onToggleSpeed = { playbackSpeed = if (playbackSpeed == 1.0f) 0.5f else 1.0f },
-                    onSavePastedLyrics = { raw -> updateLyricsWithHistory(raw.lines().map { it.trim() }.filter { it.isNotEmpty() }.mapIndexed { idx, t -> LyricLine(t, project.lyrics.getOrNull(idx)?.takeIf { it.text == t }?.startTimeMs) }) },
+                    onTogglePlay = { if (project.clips.isNotEmpty()) isPlaying = !isPlaying else Toast.makeText(context, "Agrega al menos un video o foto primero", Toast.LENGTH_SHORT).show() }, 
+                    onScrubTimeline = { currentTimelineMs = it; isPlaying = false }, 
+                    onToggleSpeed = { playbackSpeed = if (playbackSpeed == 1.0f) 0.5f else 1.0f },
+                    onSavePastedLyrics = { raw -> 
+                        val newLines = raw.lines().map { it.trim() }.filter { it.isNotEmpty() }.mapIndexed { idx, t -> 
+                            LyricLine(text = t, startTimeMs = project.lyrics.getOrNull(idx)?.takeIf { it.text == t }?.startTimeMs) 
+                        }
+                        updateLyricsWithHistory(newLines) 
+                    },
                     onTapSyncNext = { val n = project.lyrics.indexOfFirst { it.startTimeMs == null }; if (n != -1) { val m = project.lyrics.toMutableList(); m[n] = m[n].copy(startTimeMs = currentTimelineMs); updateLyricsWithHistory(m) } },
                     onUndo = { if (lyricsUndoStack.isNotEmpty()) { project = project.copy(lyrics = lyricsUndoStack.removeAt(lyricsUndoStack.lastIndex)) } },
                     onNudgeLineTime = { idx, delta -> val cur = project.lyrics[idx].startTimeMs; if (cur != null) { val m = project.lyrics.toMutableList(); m[idx] = m[idx].copy(startTimeMs = (cur + delta).coerceIn(0L, project.totalDurationMs)); updateLyricsWithHistory(m); if (!isPlaying) currentTimelineMs = m[idx].startTimeMs!! } },
